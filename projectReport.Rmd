@@ -1,0 +1,68 @@
+## Course Project: Practical Machine Learning
+### Ken Burkman   https://github.com/kenburkman, 25 MAR 2017
+
+
+**Executive Summary.**  We use Human Activity Recognition data collected from wearable accelerometers to predict motion.  The data consists of six subjects performing a bicep curl with a dumbbell, either correctly (Class A), or in one of four incorrect ways (Classes B through E). We build and cross-validate a random forest model to predict, based on a given observation of accelerometer data, which of those classes of motion a subject is exhibiting.  **Our model's accuracy is 99.94%.**
+
+**Background.**  Excerpted from the Coursera assignment page:  Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+**Data.**  The data for this project are available here: [training](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and here [testing](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+```{r}
+url_train<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+url_test<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url_train, "training.csv")
+download.file(url_test, "testing.csv")
+```
+
+**Packages**  
+```{r message=FALSE}
+require(caret); require(AppliedPredictiveModeling); require(randomForest); require(rpart);
+require(ggplot2); require(rattle)
+```
+
+**Read and Clean the Data**  We remove the first two columns of data from each set because they are not valid predictors.  We learned this only after first building a recursive partitioning model using *rpart*, which resulted in *X, observation number*, as a predictor.  Interestingly, with all columns of the data included, the *rpart* model's accuracy was 66%, but removing *X* and the subjects' names lowered our accuracy to 56.5%. Because neither model generated predictions with sufficient accuracy, they are not shown in this report.
+
+```{r}
+training<-read.csv("training.csv", header=TRUE, na.strings = c("NA", ""), skipNul = TRUE)
+testing<-read.csv("testing.csv", header=TRUE, na.strings = c("NA", ""), skipNul = TRUE)
+training <- training[, colSums(is.na(training)) == 0]
+testing<-testing[, colSums(is.na(testing)) == 0]
+training<-training[,-c(1:2)]
+testing<-testing[,-c(1:2)]
+```
+
+**Partition Training Data.**  We split out 20% of our training data to test the model we'll build.  Though this step is a means of cross-validation, we take a more deliberate approach to reducing prediction error in the next step.
+
+```{r}
+set.seed(32323)
+inTrain<-createDataPartition(y=training$classe, p=.80, list=FALSE)
+trainSet<-training[inTrain,]
+testSet<-training[-inTrain,]
+```
+
+**Build the Model and Cross Validate.**  We generate a random forest model using *classe* as the dependent or response variable and all other columns as predictors.  Quite a lot of time is needed to generate our model; a system time was 32.14. We modify the resampling method using the `trainControl` function, using the **cross-validation method *repeatedcv*** we specify 10 folds for 5 repetitions.  Through K-fold cross validation, we expect to reduce the variability of our prediction error estimate.
+
+```{r}
+tc<-trainControl(method = "repeatedcv", number = 10, repeats = 5, classProbs = TRUE)
+mod_rf<-train(classe~., method="rf", data=trainSet, trControl=tc)
+```
+
+Once we have a model, *pred_rf*, we generate a prediction against the test set provided from the website.  A confusion matrix compares our preditions against the actual values,  *testSet$classe*.  The accuracy we observe is quite good, at 0.9994902 accuracy. 
+
+```{r}
+pred_rf<-predict(mod_rf, testSet)
+confusionMatrix(pred_rf, testSet$classe)$overall['Accuracy']
+```
+
+**Quiz.**  Having determined that the model is a good predictor of the kind of motion a subject exhibited, we predict *classe* for the testing data.  An excerpt showing our first five results is included.
+
+```{r}
+quiz<-data.frame(predict(mod_rf, testing))
+colnames(quiz)<-"Ans"
+head(quiz,5)
+```
+
+**Conclusion.**  Although it's very slow, the random forest, *rf*, methodology generated an exceptional fit to predict the type of motion subjects exhibited.  Recursive partition, *rpart*, on the other hand, though comparatively quick to generate, returned much less accurate predictions.
+
+
